@@ -1,0 +1,9 @@
+gradle.taskGraph.whenReady {
+    allprojects { p ->
+        p.tasks.withType(War) { task ->
+            task.doLast {
+                ant.checksum file: it.archivePath
+            }
+        }
+    }
+}

@@ -1,0 +1,13 @@
+Manual Deployment Instructions
+==============================
+
+Web UI 
+======
+$ sudo /usr/bin/yum -y update smartsteps-web-ui-1.0.1-#{ENV['DEPLOY_VERSION']} --disablerepo=* --enablerepo=smartsteps --setopt=metadata_expire=60
+$ sudo /sbin/service tomcat7 restart
+
+REST 
+====
+$ sudo /usr/bin/yum -y update smartsteps-rest-1.0.1-#{ENV['DEPLOY_VERSION']} --disablerepo=* --enablerepo=smartsteps --setopt=metadata_expire=60 
+$ sudo /sbin/service tomcat7 restart
+

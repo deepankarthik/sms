@@ -1,0 +1,4 @@
+moduleName=smartsteps-extensions
+moduleVersion=1.0
+extensionClasses=com.telefonica.smartsteps.JodaTimeExtensionMethods,com.telefonica.smartsteps.rest.HttpHeadersExtensionMethods,com.telefonica.smartsteps.NumberExtensionMethods,com.telefonica.smartsteps.IteratorExtensionMethods,com.telefonica.smartsteps.StringExtensionMethods,com.telefonica.smartsteps.ColorExtensionMethods
+staticExtensionClasses=com.telefonica.smartsteps.JodaTimeStaticExtensionMethods

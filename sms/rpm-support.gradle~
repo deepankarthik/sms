@@ -1,0 +1,27 @@
+apply plugin: 'rpm'
+
+task rpm(type: Rpm, dependsOn: war) {
+    packageName = "smartsteps-${project.name}"
+    version = "1.0.1"
+    release = revision
+    arch = NOARCH
+    os = LINUX
+
+    doFirst {
+        summary = new File(file(war.destinationDir), war.archiveName + '.MD5').text
+    }
+
+    requires('tomcat7')
+    requires('jre', '1.7.0', GREATER|EQUAL)
+
+    into('/var/lib/tomcat7/webapps') {
+        from(war.archivePath)
+    }
+    inputs.file war.archivePath
+}
+
+build.dependsOn(rpm)
+
+String getRevision() {
+    System.getenv('BUILD_NUMBER') ?: "${System.currentTimeMillis()}experimental"
+}

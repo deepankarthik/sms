@@ -1,0 +1,58 @@
+apply plugin: 'groovy'
+apply plugin: 'war'
+apply from: rootProject.file('deployment-support.gradle')
+apply from: rootProject.file('rpm-support.gradle')
+
+dependencies {
+    providedCompile javax.servlet.servletApi
+    compile groovy
+    compile project(":common")
+    compile jersey.core, jersey.server, jersey.spring, jersey.client, jersey.multipart, jacksonJaxRs, spring.web, schemaValidator
+    compile slf4j
+    compile mongoDb, jodaTime, commons.lang
+    compile jts, geoTools.api, geoTools.referencing, geoTools.opengis, geoTools.metadata
+    compile vecMath
+    compile jsr275
+    compile opencsv
+    compile imgScalr
+    testCompile junit, gmock, hamcrest, jersey.tests
+    runtime logback
+}
+reportCodeCoverageIfEnabled()
+
+test {
+    maxParallelForks = 4
+    jvmArgs '-XX:-UseSplitVerifier'
+    systemProperty 'java.awt.headless', 'true'
+    inputs.property("alwaysExecute", UUID.randomUUID())
+}
+
+task generateLoggingDocumentation {
+    String outputFile = "${buildDir}/error-codes.txt"
+    doLast {
+        javaexec {
+            classpath configurations.all, sourceSets.test.runtimeClasspath
+            main = 'com.telefonica.smartsteps.monitoring.GenerateOpsLoggerDocumentation'
+            args = [outputFile, 'com.telefonica.smartsteps.monitoring.ErrorCode']
+        }
+    }
+
+    dependsOn(compileGroovy, compileTestGroovy)
+    inputs.source sourceSets.main.allSource, sourceSets.test.allSource
+    outputs.file outputFile
+}
+assemble.dependsOn(generateLoggingDocumentation)
+
+rpm {
+    into('/usr/share/smartsteps-rest') {
+        from "${buildDir}/error-codes.txt"
+        from 'src/test/resources/config/sample.properties'
+    }
+
+    into('/usr/bin') {
+        from fileTree("${projectDir}/../scripts") { include('*.groovy') }
+        fileMode = 0755
+    }
+
+    dependsOn generateLoggingDocumentation
+}

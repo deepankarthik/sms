@@ -1,0 +1,369 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:util="http://www.springframework.org/schema/util"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+       http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-2.0.xsd">
+
+    <bean id="configurationLocation" class="com.telefonica.ConfigurationFactory"
+          factory-method="getConfigurationLocation">
+        <constructor-arg index="0" value="SMARTSTEPS_ENV"/>
+        <constructor-arg index="1" value="classpath:config"/>
+        <!--suppress SpringPlaceholdersInspection -->
+        <constructor-arg index="2" value="file:${catalina.home}/app_data/rest"/>
+    </bean>
+
+    <util:properties id="appProperties" location="#{configurationLocation}/application.properties"/>
+
+    <!--suppress SpringBeanNameConventionInspection -->
+    <bean id="MAX_VERTICES" class="java.lang.Integer">
+        <constructor-arg type="java.lang.String" value="#{appProperties['polygons.vertices.maximum.size']}"/>
+    </bean>
+
+    <bean id="logger" class="org.slf4j.LoggerFactory" factory-method="getILoggerFactory"/>
+
+    <bean id="opsLogger" class="com.telefonica.smartsteps.monitoring.OpsLogger" scope="singleton">
+        <constructor-arg index="0" value="#{logger.getLogger('errors')}"/>
+    </bean>
+
+    <bean id="genericExceptionWrapper" class="com.telefonica.smartsteps.monitoring.GenericExceptionMapper"
+          scope="singleton">
+        <constructor-arg index="0" value="#{logger.getLogger('errors')}"/>
+    </bean>
+
+    <bean class="com.telefonica.i18n.ResourceBundleCustomisationFactory" destroy-method="close" lazy-init="false" scope="singleton">
+        <constructor-arg index="0" value="#{appProperties['flag.unapproved.messages']}"/>
+    </bean>
+
+    <bean id="adminResourceErrorLogger" class="com.telefonica.smartsteps.monitoring.AdminResourceErrorLogger"
+          scope="singleton">
+        <constructor-arg index="0" ref="opsLogger"/>
+        <constructor-arg index="1">
+            <bean class="com.telefonica.smartsteps.persistence.CappedCollectionFactory">
+                <constructor-arg index="0" ref="dbAdminInfo"/>
+                <constructor-arg index="1" value="adminErrors"/>
+                <constructor-arg index="2" value="10485760"/>
+            </bean>
+        </constructor-arg>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.security.PointsOfInterestUploadSizeLimiter" scope="singleton">
+        <constructor-arg index="0" name="paths">
+            <list>
+                <value>pointsOfInterest</value>
+                <value>pointsOfInterest/replace</value>
+            </list>
+        </constructor-arg>
+        <constructor-arg index="1" name="maxFileSize" value="10485760"/>
+        <!-- 10 MB -->
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.security.CategoryImageUploadSizeLimiter" scope="singleton">
+        <constructor-arg index="0" name="paths" value="pointsOfInterest/image"/>
+        <constructor-arg index="1" name="maxFileSize" value="10240"/>
+        <!-- 10 KB -->
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.admin.AdminResource" scope="singleton">
+        <constructor-arg index="0" ref="dailyPolygonTrafficRepository"/>
+        <constructor-arg index="1" ref="polygonRepository"/>
+        <constructor-arg index="2" ref="regionalAverageRepository"/>
+        <constructor-arg index="3" ref="delegatePolygonIndex"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.admin.ReloadPolygonsResource" scope="singleton">
+        <constructor-arg index="0" ref="polygonRepository"/>
+        <constructor-arg index="1" ref="sectorRepository"/>
+        <constructor-arg index="2" ref="delegatePolygonIndex"/>
+        <constructor-arg index="3" ref="postalSectorIndex"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.admin.UpdatePolygonPopulationResource" scope="singleton">
+        <constructor-arg index="0" ref="polygonRepository"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.admin.UpdatePostalSectorResource" scope="singleton">
+        <constructor-arg index="0" ref="sectorRepository"/>
+        <constructor-arg index="1" ref="polygonRepository"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.admin.DailyPolygonFlowsAdminResource" scope="singleton">
+        <constructor-arg index="0" ref="dailyPolygonFlowsRepository"/>
+        <constructor-arg index="1" ref="delegatePolygonIndex"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.PolygonTrafficResource" scope="singleton">
+        <constructor-arg index="0" ref="dailyPolygonTrafficRepository"/>
+        <constructor-arg index="1" ref="polygonRepository"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.PolygonDemographicTrafficResource" scope="singleton">
+        <constructor-arg index="0" ref="dailyPolygonTrafficRepository"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.PolygonHourlyTrafficResource" scope="singleton">
+        <constructor-arg index="0" ref="dailyPolygonTrafficRepository"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.PolygonTrafficActivityDataResource" scope="singleton">
+        <constructor-arg index="0" ref="dailyPolygonTrafficRepository"/>
+    </bean>
+
+    <bean id="delegatePolygonIndex" class="com.telefonica.smartsteps.search.DelegatingPolygonIndex">
+        <constructor-arg index="0">
+            <bean class="com.telefonica.smartsteps.search.InMemoryPolygonIndex" factory-method="build">
+                <constructor-arg index="0" ref="polygonRepository"/>
+            </bean>
+        </constructor-arg>
+    </bean>
+
+    <bean id="explorerPolygonIndex" class="com.telefonica.smartsteps.search.PolygonVertexLimiter">
+        <constructor-arg index="0" ref="delegatePolygonIndex"/>
+        <constructor-arg index="1" ref="MAX_VERTICES"/>
+    </bean>
+    
+    <bean id="postalSectorIndex" class="com.telefonica.smartsteps.search.DelegatingPostalSectorIndex">
+        <constructor-arg index="0">
+            <bean class="com.telefonica.smartsteps.search.InMemoryPostalSectorIndex" factory-method="build">
+                <constructor-arg index="0" ref="sectorRepository"/>
+            </bean>
+        </constructor-arg>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.PolygonResource" scope="singleton">
+        <constructor-arg index="0" ref="explorerPolygonIndex"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.SumRegionalAveragesOverTimeResource" scope="singleton">
+        <constructor-arg index="0" ref="regionalAverageRepository"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.AvailableDateRangeResource" scope="singleton">
+        <constructor-arg index="0" ref="regionalAverageRepository"/>
+        <constructor-arg index="1" ref="userDetailsRepository"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.AvailabilityCheckResource" scope="singleton">
+        <constructor-arg index="0" ref="availabilityCheckRepository"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.UniqueIdResource" scope="singleton"/>
+
+    <bean class="com.telefonica.smartsteps.rest.PointsOfInterestResource" scope="singleton">
+        <constructor-arg index="0" ref="pointsOfInterestRepository"/>
+        <constructor-arg index="1" ref="pointsOfInterestValidator"/>
+        <constructor-arg index="2" ref="imageScaler"/>
+        <constructor-arg index="3" ref="pointsOfInterestCategoryRepository"/>
+        <constructor-arg index="4" ref="userDetailsRepository"/>
+    </bean>
+
+    <bean id="imageScaler" class="com.telefonica.smartsteps.rest.ImageScaler" scope="singleton">
+        <constructor-arg index="0" value="32"/> <!-- Max dimension in pixels -->
+    </bean>
+
+    <bean id="groovyFriendlyJaxRsProvider" class="com.telefonica.smartsteps.rest.util.GroovyFriendlyJaxRsProvider"/>
+
+    <bean class="uk.co.o2.json.schema.jaxrs.JsonSchemaProvider" scope="singleton">
+        <constructor-arg index="0">
+            <bean class="com.telefonica.smartsteps.rest.util.ServletSchemaLookup"/>
+        </constructor-arg>
+        <property name="mapper" value="#{groovyFriendlyJaxRsProvider.getFriendlyObjectMapper()}"/>
+    </bean>
+
+    <bean name="mongoURI" class="com.mongodb.MongoClientURI">
+        <constructor-arg index="0" value="#{appProperties['mongodb.url']}"/>
+    </bean>
+
+    <bean name="mongoClient" class="com.mongodb.MongoClient" destroy-method="close">
+        <constructor-arg index="0" ref="mongoURI"/>
+    </bean>
+
+    <bean name="dbUserData" factory-bean="mongoClient" factory-method="getDB">
+        <constructor-arg index="0" value="smartsteps_userData"/>
+    </bean>
+
+    <bean name="dbPolygonData" factory-bean="mongoClient" factory-method="getDB">
+        <constructor-arg index="0" value="smartsteps_polygons"/>
+    </bean>
+
+    <bean name="dbFootfallData" factory-bean="mongoClient" factory-method="getDB">
+        <constructor-arg index="0" value="smartsteps_footfall"/>
+    </bean>
+
+    <bean name="dbFlowData" factory-bean="mongoClient" factory-method="getDB">
+        <constructor-arg index="0" value="smartsteps_flows"/>
+    </bean>
+
+    <bean name="dbAdminInfo" factory-bean="mongoClient" factory-method="getDB">
+        <constructor-arg index="0" value="smartsteps_adminInfo"/>
+    </bean>
+
+    <bean id="mongoDBTransformationHooks" class="com.telefonica.smartsteps.persistence.MongoDBTransformationHooks" init-method="registerHooks"
+          destroy-method="removeHooks" lazy-init="false" scope="singleton"/>
+
+    <bean id="dailyPolygonTrafficRepository"
+          class="com.telefonica.smartsteps.persistence.DailyPolygonTrafficRepository">
+        <constructor-arg index="0" value="#{dbFootfallData.getCollection('dailyPolygonTraffic')}"/>
+    </bean>
+
+    <bean id="availabilityCheckRepository"
+          class="com.telefonica.smartsteps.persistence.AvailabilityCheckRepository">
+        <constructor-arg index="0" ref="dbFootfallData"/>
+    </bean>
+
+    <bean id="polygonRepository" class="com.telefonica.smartsteps.persistence.PolygonRepository">
+        <constructor-arg index="0" value="#{dbPolygonData.getCollection('polygons')}"/>
+        <constructor-arg index="1" ref="sequenceGenerator"/>
+    </bean>
+
+    <bean id="userDetailsRepository" class="com.telefonica.smartsteps.persistence.UserDetailsRepository">
+        <constructor-arg index="0" value="#{dbUserData.getCollection('userDetails')}"/>
+    </bean>
+
+    <bean id="userPasswordRepository" class="com.telefonica.smartsteps.persistence.UserPasswordRepository">
+        <constructor-arg index="0" value="#{dbUserData.getCollection('userPassword')}"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.TooManyVerticesExceptionMapper" scope="singleton"/>
+
+    <bean id="regionalAverageRepository" class="com.telefonica.smartsteps.persistence.RegionalAverageRepository" depends-on="mongoDBTransformationHooks">
+        <constructor-arg index="0" value="#{dbFootfallData.getCollection('regionalAverages')}"/>
+        <constructor-arg index="1" ref="dailyPolygonTrafficRepository"/>
+    </bean>
+
+    <bean id="dailyPolygonFlowsRepository" class="com.telefonica.smartsteps.persistence.PolygonFlowRepository">
+        <constructor-arg index="0" value="#{dbFlowData.getCollection('dailyPolygonFlows')}"/>
+        <constructor-arg index="1" ref="delegatePolygonIndex"/>
+    </bean>
+
+    <bean id="catchmentReportRepository" class="com.telefonica.smartsteps.persistence.CatchmentReportRepository">
+        <constructor-arg index="0" value="#{dbUserData.getCollection('catchmentReport')}"/>
+        <constructor-arg index="1" ref="delegatePolygonIndex"/>
+    </bean>
+
+    <bean id="battlegroundCatchmentReportRepository" class="com.telefonica.smartsteps.persistence.BattlegroundCatchmentReportRepository">
+        <constructor-arg index="0" value="#{dbUserData.getCollection('battlegroundCatchmentReport')}"/>
+        <constructor-arg index="1" ref="delegatePolygonIndex"/>
+    </bean>
+
+    <bean id="savedLocationRepository" class="com.telefonica.smartsteps.persistence.SavedLocationRepository">
+        <constructor-arg index="0" value="#{dbUserData.getCollection('savedLocations')}"/>
+    </bean>
+
+    <bean id="pointsOfInterestRepository" class="com.telefonica.smartsteps.persistence.PointsOfInterestRepository">
+        <constructor-arg index="0" value="#{dbUserData.getCollection('pointsOfInterest')}"/>
+        <constructor-arg index="1" value="#{dbUserData.getCollection('categoryImage')}"/>
+    </bean>
+
+    <bean id="sequenceGenerator" class="com.telefonica.smartsteps.persistence.SequenceGenerator">
+        <constructor-arg index="0" value="#{dbUserData.getCollection('sequenceNumbers')}"/>
+    </bean>
+
+    <bean id="sectorRepository" class="com.telefonica.smartsteps.persistence.PostalSectorRepository">
+        <constructor-arg index="0" value="#{dbPolygonData.getCollection('postalSectors')}"/>
+        <constructor-arg index="1" ref="delegatePolygonIndex"/>
+    </bean>
+
+    <bean id="pointsOfInterestCategoryRepository" class="com.telefonica.smartsteps.persistence.PointOfInterestCategoryRepository">
+        <constructor-arg index="0" value="#{dbUserData.getCollection('pointOfInterestCategories')}"/>
+        <constructor-arg index="1" ref="sequenceGenerator"/>
+        <constructor-arg index="2" ref="pointsOfInterestRepository"/>
+    </bean>
+
+    <bean id="pointsOfInterestValidator" class="com.telefonica.smartsteps.rest.PointsOfInterestCsvValidator">
+        <constructor-arg index="0" ref="opsLogger"/>
+        <constructor-arg index="1" value='100'/>
+        <constructor-arg index="2" value='75'/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.SavedLocationResource">
+        <constructor-arg index="0" ref="savedLocationRepository"/>
+        <constructor-arg index="1" ref="dailyPolygonTrafficRepository"/>
+        <constructor-arg index="2" ref="userDetailsRepository"/>
+        <constructor-arg index="3" ref="delegatePolygonIndex"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.SavedLocationDetailsResource">
+        <constructor-arg index="0" ref="savedLocationRepository"/>
+        <constructor-arg index="1" ref="polygonRepository"/>
+        <constructor-arg index="2" ref="dailyPolygonTrafficRepository"/>
+        <constructor-arg index="3" ref="regionalAverageRepository"/>
+        <constructor-arg index="4" ref="userDetailsRepository"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.SavedLocationPolygonsResource">
+        <constructor-arg index="0" ref="savedLocationRepository"/>
+        <constructor-arg index="1" ref="polygonRepository"/>
+        <constructor-arg index="2" ref="userDetailsRepository"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.SavedLocationTrafficActivityDataResource">
+        <constructor-arg index="0" ref="savedLocationRepository"/>
+        <constructor-arg index="1" ref="dailyPolygonTrafficRepository"/>
+        <constructor-arg index="2" ref="userDetailsRepository"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.SavedLocationHourlyTrafficResource">
+        <constructor-arg index="0" ref="savedLocationRepository"/>
+        <constructor-arg index="1" ref="dailyPolygonTrafficRepository"/>
+        <constructor-arg index="2" ref="userDetailsRepository"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.SavedLocationExportResource">
+        <constructor-arg index="0" ref="savedLocationRepository"/>
+        <constructor-arg index="1" ref="dailyPolygonTrafficRepository"/>
+        <constructor-arg index="2" ref="userDetailsRepository"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.dataextract.DataExtractResource">
+        <constructor-arg index="0" ref="dailyPolygonTrafficRepository"/>
+        <constructor-arg index="1" ref="polygonRepository"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.UserDetailsResource">
+        <constructor-arg index="0" ref="userDetailsRepository"/>
+        <constructor-arg index="1" ref="userPasswordRepository"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.LoginResource">
+        <constructor-arg index="0" ref="userDetailsRepository"/>
+        <constructor-arg index="1" ref="userPasswordRepository"/>
+        <constructor-arg index="2" ref="userAuthenticationService"/>
+        <constructor-arg index="3" ref="opsLogger"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.PopulationResource">
+        <constructor-arg index="0" ref="polygonRepository"/>
+     </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.CatchmentReportResource">
+        <constructor-arg index="0" ref="catchmentReportRepository"/>
+        <constructor-arg index="1" ref="dailyPolygonFlowsRepository"/>
+        <constructor-arg index="2" ref="userDetailsRepository"/>
+        <constructor-arg index="3" ref="delegatePolygonIndex"/>
+        <constructor-arg index="4" ref="postalSectorIndex"/>
+        <constructor-arg index="5" ref="geometryCalculator"/>
+    </bean>
+
+    <bean class="com.telefonica.smartsteps.rest.BattlegroundCatchmentReportResource">
+        <constructor-arg index="0" ref="battlegroundCatchmentReportRepository"/>
+        <constructor-arg index="1" ref="dailyPolygonFlowsRepository"/>
+        <constructor-arg index="2" ref="userDetailsRepository"/>
+        <constructor-arg index="3" ref="delegatePolygonIndex"/>
+        <constructor-arg index="4" ref="postalSectorIndex"/>
+        <constructor-arg index="5" ref="geometryCalculator"/>
+    </bean>
+
+    <bean id="geometryCalculator"  class="com.telefonica.smartsteps.rest.GeometryCalculator"/>
+
+    <bean class="com.telefonica.smartsteps.rest.PostalSectorResource">
+        <constructor-arg index="0" ref="sectorRepository"/>
+     </bean>
+
+    <bean id="userAuthenticationService" class="com.telefonica.smartsteps.security.UserAuthenticationService"/>
+
+    <bean class="com.telefonica.smartsteps.rest.ValidationExceptionMapper" scope="singleton"/>
+
+    <bean class="com.telefonica.smartsteps.rest.AccessDeniedExceptionMapper" scope="singleton"/>
+
+</beans>

@@ -1,0 +1,123 @@
+String coberturaRuntime = 'net.sourceforge.cobertura:cobertura:1.9.4.1'
+
+configurations {
+    testRuntime
+}
+dependencies {
+    testRuntime coberturaRuntime
+}
+
+task coberturaReports
+
+coberturaReports.ext.codeCoverageEnabled = true
+coberturaReports.ext.reportInformation = []
+
+if (coberturaReports.codeCoverageEnabled) {
+    if (!project.hasProperty("build")) {
+        task build
+    }
+    build.dependsOn(coberturaReports)
+}
+
+subprojects {
+    ext.reportCodeCoverageIfEnabled = {
+        if (!coberturaReports.codeCoverageEnabled) {
+            return
+        }
+
+        coberturaReports.dependsOn(test)
+
+        def mainClassesDirectory = sourceSets['main'].output.classesDir
+        def backupOfUninstrumentedClasses = "${mainClassesDirectory}-copy"
+        def coberturaDataFile = "${project.buildDir}/cobertura.ser"
+        def srcDirs = sourceSets['main'].allSource.srcDirs
+
+        coberturaReports.reportInformation << [sourceDirs: srcDirs, dataFile: coberturaDataFile]
+
+        dependencies {
+            testRuntime coberturaRuntime
+        }
+
+        test.doFirst {
+            if (mainClassesDirectory.exists()) {
+                ant {
+                    delete(file: coberturaDataFile, failonerror: false)
+                    delete(dir: backupOfUninstrumentedClasses, failonerror: false)
+                    copy(todir: backupOfUninstrumentedClasses) {
+                        fileset(dir: mainClassesDirectory)
+                    }
+                    taskdef(resource: 'tasks.properties', classpath: configurations.testRuntime.asPath)
+                    'cobertura-instrument'(datafile: coberturaDataFile) {
+                        fileset(dir: mainClassesDirectory, includes: "**/*.class")
+                    }
+                }
+            }
+        }
+
+        test.doLast {
+            if (new File(backupOfUninstrumentedClasses).exists()) {
+                ant {
+                    delete(file: mainClassesDirectory)
+                    move(file: backupOfUninstrumentedClasses, tofile: mainClassesDirectory)
+                }
+            }
+        }
+
+        test {
+            systemProperties["net.sourceforge.cobertura.datafile"] = coberturaDataFile
+        }
+    }
+}
+
+coberturaReports << {
+
+    if (coberturaReports.reportInformation.empty) {
+        throw new RuntimeException("No cobertura projects enabled!")
+    }
+
+    def buildDirName = project.buildDir.toString()
+    def mergedSerFile = "${project.buildDir}/merged-cobertura.ser"
+
+    ant {
+        delete(file: mergedSerFile)
+        taskdef(resource: 'tasks.properties', classpath: configurations.testRuntime.asPath)
+        'cobertura-merge'(datafile: mergedSerFile) {
+            coberturaReports.reportInformation.each {
+                if (new File(it.dataFile.toString()).exists()) {
+                    fileset(file: it.dataFile)
+                }
+            }
+        }
+        'cobertura-report'(destdir: "${buildDirName}/reports/coverage", format: 'html', datafile: mergedSerFile) {
+            coberturaReports.reportInformation.each {
+                it.sourceDirs.each {
+                    if (new File(it.toString()).exists()) {
+                        fileset(dir: it, includes: "**/*.*")
+                    }
+                }
+            }
+        }
+        println "\t Html coverage report at file:${buildDirName}/reports/coverage/index.html"
+
+        'cobertura-report'(destdir: "${buildDirName}/reports/coverage", format: 'xml', datafile: mergedSerFile) {
+            coberturaReports.reportInformation.each {
+                it.sourceDirs.each {
+                    if (new File(it.toString()).exists()) {
+                        fileset(dir: it, includes: "**/*.*")
+                    }
+                }
+            }
+        }
+    }
+
+    File coverageFile = new File("${buildDirName}/reports/coverage/coverage.xml" as String)
+    def slurper = new XmlSlurper()
+    slurper.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+    def slurperCoverage = slurper.parse(coverageFile)
+    int linesCovered = slurperCoverage."@lines-covered".toString() as int
+    int validLines = slurperCoverage."@lines-valid".toString() as int
+
+    if (linesCovered != validLines) {
+        throw new RuntimeException("Less than 100% line coverage.\nFor more info see: file:${buildDirName}/reports/coverage/index.html")
+    }
+}

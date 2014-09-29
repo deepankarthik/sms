@@ -1,0 +1,3 @@
+mongodb.url=mongodb url
+polygons.vertices.maximum.size=polygon vertices maximum size
+flag.unapproved.messages=flag unapproved messages

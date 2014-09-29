@@ -1,0 +1,29 @@
+apply plugin: 'java'
+apply from: 'external-dependencies.gradle'
+apply from: 'ide-support.gradle'
+apply from: 'cobertura-support.gradle'
+apply from: 'archive-md5-support.gradle'
+apply from: 'add-idea-facets.gradle'
+apply from: 'release-notes.gradle'
+
+allprojects {
+   
+    sourceCompatibility = '1.7'
+    targetCompatibility = '1.7'
+}
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'org.gradle.api.plugins:gradle-cargo-plugin:0.6.1'
+    }
+}
+
+task everything(type: GradleBuild) {
+    description = 'Everything you need to run for pre-commit checks'
+    group = "sms"
+    tasks = ['build', 'localDeploy']
+}
+
